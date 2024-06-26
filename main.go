@@ -22,6 +22,10 @@ func main() {
 		}
 	}(arr, ch)
 	time.Sleep(2 * time.Second)
+//instead of just using an anonymous function
+// if i use go func(...) it does not return.
+// even if i wait with time.Sleep(..)
+// go func doesn't return, why?
 	func(ch chan int) {
 		for i := 0; i < cap(ch); i++ {
 			fmt.Println(<-ch)
