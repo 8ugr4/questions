@@ -1,34 +1,80 @@
 package main
 
 import (
+	"context"
+	"crypto/tls"
 	"fmt"
-	"time"
+	"github.com/ClickHouse/clickhouse-go/v2"
+	"log"
+
+	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 )
 
-func timesThree(arr []int, ch chan int) {
-	for _, elem := range arr {
-		ch <- elem * 3
+func main() {
+	conn, err := connect()
+	if err != nil {
+		panic((err))
 	}
+
+	ctx := context.Background()
+	rows, err := conn.Query(ctx, "SELECT name,toString(uuid) as uuid_str FROM system.tables LIMIT 5")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	for rows.Next() {
+		var (
+			name, uuid string
+		)
+		if err := rows.Scan(
+			&name,
+			&uuid,
+		); err != nil {
+			log.Fatal(err)
+		}
+		log.Printf("name: %s, uuid: %s",
+			name, uuid)
+	}
+
 }
 
-func main() {
-	arr := []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
-	ch := make(chan int, len(arr))
+func connect() (driver.Conn, error) {
+	var (
+		ctx       = context.Background()
+		conn, err = clickhouse.Open(&clickhouse.Options{
+			Addr: []string{"localhost:9000"},
+			Auth: clickhouse.Auth{
+				Database: "clickhouse-server",
+				Username: "default",
+				Password: "",
+			},
+			ClientInfo: clickhouse.ClientInfo{
+				Products: []struct {
+					Name    string
+					Version string
+				}{
+					{Name: "clickhouse-server1", Version: "0.1"},
+				},
+			},
 
-	go func(arr []int, ch chan int) {
+			Debugf: func(format string, v ...interface{}) {
+				fmt.Printf(format, v)
+			},
+			TLS: &tls.Config{
+				InsecureSkipVerify: true,
+			},
+		})
+	)
 
-		for _, elem := range arr {
-			ch <- elem * 3
+	if err != nil {
+		return nil, err
+	}
+
+	if err := conn.Ping(ctx); err != nil {
+		if exception, ok := err.(*clickhouse.Exception); ok {
+			fmt.Printf("Exception [%d] %s \n%s\n", exception.Code, exception.Message, exception.StackTrace)
 		}
-	}(arr, ch)
-	time.Sleep(2 * time.Second)
-//instead of just using an anonymous function
-// if i use go func(...) it does not return.
-// even if i wait with time.Sleep(..)
-// go func doesn't return, why?
-	func(ch chan int) {
-		for i := 0; i < cap(ch); i++ {
-			fmt.Println(<-ch)
-		}
-	}(ch)
+		return nil, err
+	}
+	return conn, nil
 }
